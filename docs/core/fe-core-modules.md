@@ -137,13 +137,13 @@
   - Docker 容器化部署（把构建产物 + 静态服务器打进镜像，环境一致）。
 
 ### 性能与监控
-- **构建性能**
-> 持久化缓存、并行构建、拆包（runtime / vendor / 业务分离）。
-- **运行时性能**
-> 代码分割 + 按需加载、gzip / brotli 压缩、图片（WebP/AVIF）与字体（font-display: swap）优化。
-- **可观测**
-> Source Map 定位线上报错（Sentry 等）、Web Vitals 指标（LCP / INP / CLS）、Lighthouse 审计。
 
+- **构建性能**
+  > 持久化缓存、并行构建、拆包（runtime / vendor / 业务分离）。
+- **运行时性能**
+  > 代码分割 + 按需加载、gzip / brotli 压缩、图片（WebP/AVIF）与字体（font-display: swap）优化。
+- **可观测**
+  > Source Map 定位线上报错（Sentry 等）、Web Vitals 指标（LCP / INP / CLS）、Lighthouse 审计。
 
 ## 模块化（入门到精通）
 
@@ -159,3 +159,351 @@
 
 ::: tip 整体设计：分层 · 状态 · 渲染 · 微前端 · 跨端。— 应用整体结构与模式设计
 :::
+
+### 0. 架构化要解决的问题
+
+当应用从"几个页面"长到"几十个业务域"，真正痛的是：**状态乱飞、组件耦合、渲染策略不清、多团队协作相撞**。架构化就是用分层、状态、渲染、微前端等模式，让系统"能长多大、多稳、多易维护"。
+
+---
+
+### 1. 组件架构
+
+#### 1.1 容器组件 vs 展示组件（React）
+
+::: code-group
+
+```tsx [React]
+// 展示组件：纯 props 驱动，无取数逻辑，易测试
+function UserCard({ name, avatar }: { name: string; avatar: string }) {
+  return (
+    <div className="card">
+      <img src={avatar} alt={name} />
+      <span>{name}</span>
+    </div>
+  );
+}
+
+// 容器组件：负责取数与状态
+function UserContainer({ id }: { id: string }) {
+  const { data, loading } = useUser(id); // 自定义 Hook 取数
+  if (loading) return <Spinner />;
+  return <UserCard name={data.name} avatar={data.avatar} />;
+}
+```
+
+```vue [Vue]
+<!-- UserCard.vue 展示组件 -->
+<template>
+  <div class="card">
+    <img :src="avatar" :alt="name" />
+    <span>{{ name }}</span>
+  </div>
+</template>
+<script setup lang="ts">
+defineProps<{ name: string; avatar: string }>();
+</script>
+
+<!-- UserContainer.vue 容器组件 -->
+<script setup lang="ts">
+import { useUser } from "@/composables/useUser";
+const props = defineProps<{ id: string }>();
+const { data, loading } = useUser(props.id);
+</script>
+```
+
+:::
+
+#### 1.2 逻辑复用：Hooks（React） vs Composables（Vue）
+
+::: code-group
+
+```ts [Hooks（React）]
+// React 自定义 Hook
+function useToggle(initial = false) {
+  const [on, setOn] = useState(initial);
+  const toggle = useCallback(() => setOn((v) => !v), []);
+  return [on, toggle] as const;
+}
+```
+
+```ts [Composables（Vue）]
+// Vue 组合式函数（Composable）
+import { ref } from "vue";
+export function useToggle(initial = false) {
+  const on = ref(initial);
+  const toggle = () => (on.value = !on.value);
+  return { on, toggle };
+}
+```
+
+:::
+
+> 现代复用首选 Hooks / Composables：**组合优于继承**，横向抽离状态逻辑而非层层包裹。
+
+#### 1.3 原子设计落地
+
+```
+src/components/
+├── atoms/      Button, Input, Avatar
+├── molecules/  SearchBar (Input + Button)
+├── organisms/  UserCard (Avatar + Name + Actions)
+├── templates/  PageLayout
+└── pages/      UserProfilePage
+```
+
+#### 1.4 跨层级通信：Context（React）vs provide/inject（Vue）
+
+::: code-group
+
+```tsx [Context（React）]
+// React：高频变化的状态不要放 Context，否则所有消费者重渲染
+const ThemeContext = createContext<"light" | "dark">("light");
+function App() {
+  const [theme] = useState<"light" | "dark">("light");
+  return (
+    <ThemeContext.Provider value={theme}>{/* ... */}</ThemeContext.Provider>
+  );
+}
+```
+
+```ts [provide/inject（Vue）]
+// Vue：provide / inject 跨层级共享
+// 祖先
+import { provide, ref } from "vue";
+provide("theme", ref("light"));
+// 后代
+import { inject } from "vue";
+const theme = inject("theme");
+```
+:::
+
+### 2. 状态管理
+
+#### 2.1 客户端状态：Zustand（React，轻量）
+
+```ts
+import { create } from "zustand";
+interface CartState {
+  items: string[];
+  add: (item: string) => void;
+}
+export const useCart = create<CartState>((set) => ({
+  items: [],
+  add: (item) => set((s) => ({ items: [...s.items, item] })),
+}));
+// 使用：const add = useCart(s => s.add)
+```
+
+#### 2.2 客户端状态：Pinia（Vue，官方推荐）
+
+```ts
+// stores/cart.ts
+import { defineStore } from "pinia";
+export const useCart = defineStore("cart", {
+  state: () => ({ items: [] as string[] }),
+  actions: {
+    add(item: string) {
+      this.items.push(item);
+    },
+  },
+});
+// 组件内：const cart = useCart(); cart.add('book')
+```
+
+#### 2.3 Redux Toolkit（React，复杂可预测流）
+
+```ts
+import { createSlice, configureStore } from "@reduxjs/toolkit";
+const cart = createSlice({
+  name: "cart",
+  initialState: { items: [] as string[] },
+  reducers: {
+    add: (s, a) => {
+      s.items.push(a.payload);
+    },
+  }, // 内部"可变"写法，RTK 用 Immer 保证不可变
+});
+export const store = configureStore({ reducer: { cart: cart.reducer } });
+```
+
+#### 2.4 服务端状态：TanStack Query（React）/ SWR
+
+```ts
+// React：取数缓存/重取/失效，和本地 UI 状态分离
+import { useQuery } from "@tanstack/react-query";
+function useUser(id: string) {
+  return useQuery({
+    queryKey: ["user", id],
+    queryFn: () => fetch(`/api/user/${id}`).then((r) => r.json()),
+    staleTime: 60_000,
+  });
+}
+```
+
+Vue 等价（`@tanstack/vue-query` 或 `swr-vue`）：
+
+```ts
+import useSWR from "swr";
+const { data, error } = useSWR(`/api/user/${id}`, fetcher);
+```
+
+> **关键区分**：来自 API、会过期、需缓存的服务端状态，交给 TanStack Query/SWR；本地 UI 状态才放进 Redux/Zustand/Pinia。
+
+---
+
+### 3. 渲染架构（CSR/SSR/SSG/ISR）
+
+#### 3.1 Next.js 渲染策略选择
+
+```tsx
+// app/page.tsx —— 默认 SSR（动态）
+export default async function Page() {
+  const data = await fetch("...").then((r) => r.json()); // 每次请求服务端取数
+  return <List data={data} />;
+}
+
+// 静态生成 SSG
+export const dynamic = "force-static";
+
+// 增量再生 ISR：每 60s 重建一次
+export const revalidate = 60;
+```
+
+#### 3.2 水合（Hydration）注意事项
+
+```tsx
+// ❌ 服务端/客户端不一致会导致 hydration mismatch
+function Bad() {
+  const now = new Date().toISOString(); // 两端时间不同
+  return <time>{now}</time>;
+}
+// ✅ 用 useEffect 在客户端再赋值，或标记 suppressHydrationWarning
+function Good() {
+  const [now, setNow] = useState("");
+  useEffect(() => setNow(new Date().toISOString()), []);
+  return <time suppressHydrationWarning>{now}</time>;
+}
+```
+
+#### 3.3 CSR vs SSR 取舍
+
+| 场景               | 推荐      | 理由             |
+| ------------------ | --------- | ---------------- |
+| 后台 / 工具类      | CSR       | 不需 SEO，交互重 |
+| 内容 / 电商 / 营销 | SSR / SSG | SEO 好、首屏快   |
+| 博客 / 文档        | SSG / ISR | 构建期生成，最快 |
+
+---
+
+### 4. 微前端
+
+#### 4.1 qiankun 主应用注册子应用
+
+```ts
+// 主应用
+import { registerMicroApps, start } from "qiankun";
+registerMicroApps([
+  {
+    name: "sub-vue",
+    entry: "//localhost:7100", // 子应用入口
+    container: "#subapp",
+    activeRule: "/sub-vue",
+  },
+]);
+start();
+```
+
+```js
+// 子应用（Vue）导出生命周期
+export async function mount(props) {
+  render(App);
+}
+export async function unmount() {
+  app.unmount();
+}
+```
+
+#### 4.2 Module Federation（webpack 5 运行时共享）
+
+```js
+// 宿主 webpack.config.js
+const { ModuleFederationPlugin } = require("webpack").container;
+plugins: [
+  new ModuleFederationPlugin({
+    name: "host",
+    remotes: { remote: "remote@http://localhost:3001/remoteEntry.js" },
+  }),
+];
+// 使用：const RemoteBtn = lazy(() => import('remote/Button'))
+```
+
+> 微前端何时**不该**用：小团队、单一产品、无并行发布需求——拆了反而增加通信与重复依赖成本。
+
+---
+
+### 5. 工程模式（Clean Architecture / Fiber）
+
+#### 5.1 Clean Architecture 分层（前端落地）
+
+```
+src/
+├── domain/       纯业务规则（不依赖框架，可单测）
+│   └── user.ts   export function canCheckout(user) {...}
+├── usecases/     应用用例（编排 domain）
+│   └── checkout.ts
+├── adapters/     接口适配（API、存储）
+│   └── userApi.ts
+└── ui/           React/Vue 组件（最外层，依赖内层）
+```
+
+> 依赖规则**只能向内**：`ui → usecases → domain`，内层不感知外层，核心业务逻辑可独立测试、可换框架。
+
+#### 5.2 React Fiber 与并发渲染
+
+```tsx
+// 并发特性：用 startTransition 标记非紧急更新，避免长任务阻塞输入
+import { startTransition, useState } from "react";
+function Search() {
+  const [query, setQuery] = useState("");
+  const [list, setList] = useState([]);
+  function onChange(e) {
+    setQuery(e.target.value); // 紧急：输入框立即响应
+    startTransition(() => {
+      // 非紧急：列表可被打断
+      setList(filterBigList(e.target.value));
+    });
+  }
+}
+```
+
+> Fiber 把渲染拆成可中断的小任务，支撑 `Suspense` / `startTransition` 等并发能力，避免主线程长任务卡顿。
+
+#### 5.3 安全架构要点
+
+```http
+# CSP：限制可执行脚本来源，防 XSS 注入
+Content-Security-Policy: default-src 'self'; script-src 'self' 'nonce-xxx'
+```
+
+- XSS
+  > 所有用户输入做转义/校验（框架默认转义，慎用 `dangerouslySetInnerHTML` / `v-html`）；
+- CSRF
+  > 同源策略 + Token 校验；
+- SRI
+  > `<script integrity="sha384-...">` 防 CDN 资源被篡改。
+
+---
+
+### 附：架构选型决策表
+
+| 问题         | 选项                              | 触发条件               |
+| ------------ | --------------------------------- | ---------------------- |
+| 状态放哪？   | Redux / Zustand / Pinia           | 本地 UI 状态           |
+|              | TanStack Query / SWR              | 服务端取数缓存         |
+| 渲染方式？   | CSR / SSR / SSG / ISR             | 看 SEO 与更新频率      |
+| 要微前端吗？ | qiankun / ModuleFederation / 无界 | 多团队并行 + 独立部署  |
+| 要跨端吗？   | RN / Flutter / uni-app / Taro     | 需覆盖 App / 小程序    |
+| 要 BFF 吗？  | 自建中间层                        | 前端直连多后端成本高   |
+| 要 DDD 吗？  | Clean Architecture                | 业务复杂度高、需强可测 |
+
+> 架构化的核心不是"用最牛的"，而是**为当前规模选最合适、且能平滑演进**的方案。
