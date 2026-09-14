@@ -155,6 +155,114 @@
 ::: tip 协作统一：风格 · 类型 · Git · 文档 · 标准。— 团队协作的统一约定与工程标准
 :::
 
+### 1. 代码风格
+
+- **ESLint**：可配置规则集，流行基线有 Airbnb、Standard、Google 风格。
+- **Prettier**：统一格式化（引号/分号/换行）— Prettier 管格式，ESLint 管质量。
+- **EditorConfig**：跨编辑器统一缩进、编码、换行符。
+- **CSS 命名**：BEM（Block-Element-Modifier），如 .card\_\_title--active。
+
+### 2. 类型与命名
+
+- **TypeScript**
+  > 静态类型 + tsconfig 严格度配置（strict、noImplicitAny 等），大型项目的事实标准；JSDoc 用于 JS 项目的轻量类型标注。
+- **命名约定**
+  - 变量/函数 camelCase；
+  - 类 PascalCase；
+  - 组件（camelCase | kebab-case）
+  - 常量 UPPER_SNAKE_CASE；
+  - 文件命名与目录保持一致（kebab-case）。
+
+### 3. Git 与版本管理规范
+
+#### 3.1 分支模型
+
+不同团队规模和工作节奏适用不同的分支策略。
+
+| 分支类型     | 命名规范          | 职责          | 关键规则                                                     |
+| ------------ | ----------------- | ------------- | ------------------------------------------------------------ |
+| 主分支       | `master` / `main` | 生产环境      | 禁止直接推送，仅通过 release/hotfix 合并，每次合并打版本标签 |
+| 开发分支     | `develop`         | 日常开发      | 功能分支的合并目标，测试环境代码来源                         |
+| 功能分支     | `feature/xxx`     | 单个功能      | 从 develop 创建，完成后合并回 develop 并删除                 |
+| 预发布分支   | `release/vX.Y.Z`  | 发布前测试    | 仅修复 Bug，不新增功能，测试通过后合并到 master 和 develop   |
+| 紧急修复分支 | `hotfix/xxx`      | 线上 Bug 急救 | 从 master 创建，修复后合并回 master 和 develop               |
+
+#### 3.2 提交信息规范
+
+```sh [标准格式]
+<类型>(<范围>): <简短描述>
+```
+
+| 类型       | 使用场景               | Semver 影响 |
+| ---------- | ---------------------- | ----------- |
+| `feat`     | 新增用户可见功能       | MINOR       |
+| `fix`      | 修复用户可见 Bug       | PATCH       |
+| `docs`     | 仅文档变更             | —           |
+| `style`    | 格式调整（不影响逻辑） | —           |
+| `refactor` | 重构（无新功能无修复） | —           |
+| `perf`     | 性能优化               | PATCH       |
+| `test`     | 测试增删改             | —           |
+| `build`    | 构建系统/依赖变更      | —           |
+| `ci`       | CI 配置变更            | —           |
+| `chore`    | 杂项维护               | —           |
+| `revert`   | 回滚提交               | —           |
+
+#### 3.3 Git Hooks 管理
+
+| 工具/库         | 作用                                                   | 典型触发时机      |
+| --------------- | ------------------------------------------------------ | ----------------- |
+| **Husky**       | 管理 Git Hooks 的底层框架，让钩子能随项目共享          | 安装后自动激活    |
+| **lint-staged** | 只对暂存区的文件运行 Lint/Format，避免全量检查拖慢提交 | `pre-commit`      |
+| **commitlint**  | 校验提交信息是否符合 Conventional Commits 规范         | `commit-msg`      |
+| **Commitizen**  | 交互式引导填写规范的提交信息，从源头减少错误           | 手动运行 `git cz` |
+
+📦 组合建议
+
+- **引导 + 校验 + 自动化**
+  > Commitizen（引导填写） + Husky（Hook 管理） + commitlint（校验） + standard-version（生成 CHANGELOG 和版本号）
+- **更细粒度的组合**
+  > Husky + lint-staged（仅对暂存文件执行 Lint/Format） + commitlint（提交信息校验） + pre-push 测试
+
+📦 进阶与专项工具
+
+- 提交信息增强/校验
+  - **commitlint-plugin-smart**
+    > 基于 cz-git 的二次封装，预设 20+ 提交类型并支持 Emoji，专门优化了 MonoRepo 项目的 scope 识别
+  - **@abctech001/code-quality-toolkit**
+    > 一键集成 Husky、lint-staged、ESLint、Prettier、Commitlint
+- 分支命名规范
+  - **branchlint2**
+    > 专门校验分支命名，通过 .branchlintrc 配置允许的前缀、分隔符、最大层级等，可配合 Husky 在 pre-push 时拦截
+  - **cnb**
+    > 另一个分支命名一致性校验 CLI 工具
+  - **@branchwright/cli**
+    > 支持交互式创建分支、自定义模板（如 feat/PROJ-123-description）以及可扩展的规则引
+- 版本发布与 Changelog
+  - **standard-version**
+    > 根据 Conventional Commits 自动决定版本号、生成 CHANGELOG、提交版本变更并打 Tag，是前端项目发布自动化的常用选择
+- 一体化工作流
+  - **snail-git-add**
+    > 交互式 Git 工具，将文件选择、约定式提交、分支管理集成在一个 CLI 中，适合想减少依赖安装的场景
+
+> 配合 Husky 的三个核心钩子：pre-commit 跑 lint-staged，commit-msg 跑 commitlint，pre-push 跑类型检查或测试
+
+### 4. 标准与安全
+
+- 遵循 **W3C / WHATWG** 的 Web 标准，语义化 HTML 标签。
+- 无障碍（**a11y**）：WCAG 指南，键盘可操作、aria 属性、对比度。
+- 国际化（**i18n**）：文案抽取、语言包、格式化（数字 / 日期 / 复数）。
+- 安全规范：依赖漏洞扫描、配置审查、敏感信息不入库（用环境变量 / 密钥管理，避免硬编码）。
+
+### 5. 流程与文档
+
+- PR 模板、评审 Checklist、提交信息规范。
+- 目录结构约定（按功能模块划分 vs 按技术层划分）。
+- README、API 文档、Storybook（组件文档 + 可视化调试）。
+
+📚 目录结构两种主流
+- 按技术层（`components/、utils/、views/`） — 小项目直观；
+- 按功能模块（`feature/user/、feature/order/`） — 大项目内聚、易拆分。
+
 ## 架构化（入门到精通）
 
 ::: tip 整体设计：分层 · 状态 · 渲染 · 微前端 · 跨端。— 应用整体结构与模式设计
@@ -277,6 +385,7 @@ provide("theme", ref("light"));
 import { inject } from "vue";
 const theme = inject("theme");
 ```
+
 :::
 
 ### 2. 状态管理
@@ -289,9 +398,8 @@ const theme = inject("theme");
   - Jotai / Recoil：原子状态（细粒度、按需订阅）。
 - `服务端状态`：缓存、重取、失效管理（把"取数"从业务状态里剥离开）
   - React Query / TanStack Query
-  - SWR 
+  - SWR
 - 另有路由状态、URL 状态、表单状态等分层管理思想。
-
 
 #### 2.1 客户端状态：Zustand（React，轻量）
 
@@ -427,7 +535,6 @@ function Good() {
 - **Module Federation**：依赖共享的运行时模块联邦（webpack 5）。
 - **无界 wujie**：腾讯开源，基于 Web Components + iframe 的方案。
 
-
 #### 4.1 qiankun 主应用注册子应用
 
 ```ts
@@ -534,6 +641,7 @@ Content-Security-Policy: default-src 'self'; script-src 'self' 'nonce-xxx'
 - **uni-app / Taro**：一套代码编译到多端（小程序 / H5 / App）。
 
 2️⃣ **BFF（Backend For Frontend）**
+
 > 前端专属的中间层服务，负责聚合、裁剪、适配后端接口，降低前端直接对接多个后端服务的复杂度。
 
 ### 附：架构选型决策表
