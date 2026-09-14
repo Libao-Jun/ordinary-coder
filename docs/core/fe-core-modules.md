@@ -168,6 +168,8 @@
 
 ### 1. 组件架构
 
+> 原子设计（Atomic Design）：atoms → molecules → organisms → templates → pages 五级递进。
+
 #### 1.1 容器组件 vs 展示组件（React）
 
 ::: code-group
@@ -279,6 +281,18 @@ const theme = inject("theme");
 
 ### 2. 状态管理
 
+- 客户端状态
+  - Redux：单一 store、单向数据流、不可变更新（ Redux Toolkit 已大幅简化样板）；
+  - MobX：响应式可变；
+  - Zustand：轻量、无 Provider 包裹；
+  - Pinia / Vuex：Vue 系（Pinia 是 Vue 3 官方推荐）；
+  - Jotai / Recoil：原子状态（细粒度、按需订阅）。
+- `服务端状态`：缓存、重取、失效管理（把"取数"从业务状态里剥离开）
+  - React Query / TanStack Query
+  - SWR 
+- 另有路由状态、URL 状态、表单状态等分层管理思想。
+
+
 #### 2.1 客户端状态：Zustand（React，轻量）
 
 ```ts
@@ -353,6 +367,15 @@ const { data, error } = useSWR(`/api/user/${id}`, fetcher);
 
 ### 3. 渲染架构（CSR/SSR/SSG/ISR）
 
+| 方案         | 全称          | 特点                                            | 适用                  |
+| ------------ | ------------- | ----------------------------------------------- | --------------------- |
+| **CSR**      | 客户端渲染    | 首屏依赖 JS，SEO 弱                             | 后台/工具类应用       |
+| **SSR**      | 服务端渲染    | 服务端出 HTML，SEO 好、首屏快（Next.js / Nuxt） | 内容/电商/营销页      |
+| **SSG**      | 静态站点生成  | 构建期生成 HTML，最快但内容更新需重建           | 博客/文档/官网        |
+| **ISR**      | 增量静态再生  | Next.js 提出，SSG 基础上支持按需重建页面        | 大量静态页 + 偶发更新 |
+| **同构**     | Isomorphic    | 同一套代码两端运行（水合 hydration）            | SSR/CSR 共享逻辑      |
+| **流式渲染** | Streaming SSR | 边渲染边下发，缩短 TTFB                         | 大型 SSR 页面         |
+
 #### 3.1 Next.js 渲染策略选择
 
 ```tsx
@@ -396,6 +419,14 @@ function Good() {
 ---
 
 ### 4. 微前端
+
+将单体应用拆成多个可独立开发、独立部署的子应用，再在运行时组合：
+
+- **single-spa**：基础框架，只负责应用生命周期（bootstrap/mount/unmount）。
+- **qiankun**：基于 single-spa 的完整方案，主打 JS 沙箱 + 样式隔离。
+- **Module Federation**：依赖共享的运行时模块联邦（webpack 5）。
+- **无界 wujie**：腾讯开源，基于 Web Components + iframe 的方案。
+
 
 #### 4.1 qiankun 主应用注册子应用
 
@@ -493,6 +524,17 @@ Content-Security-Policy: default-src 'self'; script-src 'self' 'nonce-xxx'
   > `<script integrity="sha384-...">` 防 CDN 资源被篡改。
 
 ---
+
+### 6. 跨端与后端
+
+1️⃣ 跨端框架
+
+- **React Native**：React 语法渲染原生组件；
+- **Flutter**：自绘渲染引擎、Dart；
+- **uni-app / Taro**：一套代码编译到多端（小程序 / H5 / App）。
+
+2️⃣ **BFF（Backend For Frontend）**
+> 前端专属的中间层服务，负责聚合、裁剪、适配后端接口，降低前端直接对接多个后端服务的复杂度。
 
 ### 附：架构选型决策表
 
